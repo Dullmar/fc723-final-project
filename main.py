@@ -1,4 +1,5 @@
 import os
+import random
 
 # constants used in the code
 ISLE = "X"
@@ -8,6 +9,7 @@ FREE = "F"
 NUM_ROWS = 7
 NUM_COLS = 80
 SEATS_FILE = "burak.txt"
+CUSTOMERS_FILE = "customers.txt"
 
 
 # print the menu options
@@ -81,15 +83,29 @@ def parse_seat_number(seat_number):
 
 
 # Book a seat
-def book_seat(seats):
+def book_seat(seats, customers):
     seat_number = input("Enter seat number (e.g 1A): ")
     seat_number = seat_number.strip()
+    seat_number = seat_number.upper()
     parsed_seat_number = parse_seat_number(seat_number)
     if parsed_seat_number is None:
         print("That is not a valid seat number.")
     else:
         [row, col] = parsed_seat_number
         if seats[row][col] == FREE:
+            # get customer information
+            customer_name = input("Enter customer name: ").strip()
+            passport_number = input("Enter customer passport number: ").strip()
+            # generate a reference number
+            reference_number = generate_reference_number(seats)
+            customers.append(
+                {
+                    "reference_number": reference_number,
+                    "customer_name": customer_name,
+                    "passport_number": passport_number,
+                    "seat_number": seat_number,
+                }
+            )
             seats[row][col] = RESERVED
             print(f"Seat {seat_number} reserved successfully.")
         else:
@@ -97,15 +113,19 @@ def book_seat(seats):
 
 
 # Free a seat
-def free_seat(seats):
+def free_seat(seats, customers):
     seat_number = input("Enter seat number (e.g 1A): ")
     seat_number = seat_number.strip()
+    seat_number = seat_number.upper()
     parsed_seat_number = parse_seat_number(seat_number)
     if parsed_seat_number is None:
         print("That is not a valid seat number.")
     else:
         [row, col] = parsed_seat_number
         if seats[row][col] == RESERVED:
+            # remove the seat number and reference from the customers list
+            new_customers = [c for c in customers if c["seat_number"] != seat_number]
+            customers = new_customers[:]
             seats[row][col] = FREE
             print(f"Seat {seat_number} freed successfully.")
         else:
@@ -113,7 +133,7 @@ def free_seat(seats):
 
 
 # Show the booking state
-def show_booking_state(seats):
+def show_booking_state(seats, customers):
     letters = ["A", "B", "C", ISLE, "D", "E", "F"]
     i = 0
     j = 0
@@ -122,8 +142,10 @@ def show_booking_state(seats):
         for j in range(0, NUM_COLS):
             if seats[i][j] == RESERVED:
                 booked_seats.append(f"{j+1}{letters[i]}")
-    print(f"Reserved seats({len(booked_seats)}): ", end='')
-    print(", ".join(booked_seats))
+    print(f"Reserved seats({len(booked_seats)}): ")
+    for seat in booked_seats:
+        customer = get_customer_seat(seat, customers)
+        print(f"Seat {seat}: {customer['customer_name']}")
 
 
 # Read the seat arrangement from a file
@@ -165,6 +187,51 @@ def read_seats_from_file():
     return seats
 
 
+# read the customer information and reference numbers from the file
+def read_customers_from_file():
+    customers = []  # use a list where each element is a dictionary
+    # the file is written in the following format (the dictionary will also have the same keys):
+    # reference_number
+    # customer_name
+    # passport_number
+    # seat_number
+    if os.path.exists(CUSTOMERS_FILE):
+        with open(CUSTOMERS_FILE, "r") as file:
+            lines = file.readlines()
+            for i in range(0, len(lines), 4):
+                reference_number = lines[i].strip()
+                customer_name = lines[i + 1].strip()
+                passport_number = lines[i + 2].strip()
+                seat_number = lines[i + 3].strip()
+                customers.append(
+                    {
+                        "reference_number": reference_number,
+                        "customer_name": customer_name,
+                        "passport_number": passport_number,
+                        "seat_number": seat_number,
+                    }
+                )
+    return customers
+
+
+# write the customer information and reference numbers to file
+def write_customers_to_file(customers):
+    with open(CUSTOMERS_FILE, "w") as file:
+        for customer in customers:
+            file.write(customer["reference_number"] + "\n")
+            file.write(customer["customer_name"] + "\n")
+            file.write(customer["passport_number"] + "\n")
+            file.write(customer["seat_number"] + "\n")
+
+
+# get the customer who reserved a seat. Returns None if no such seat has been reserved.
+def get_customer_seat(seat_number, customers):
+    for c in customers:
+        if c["seat_number"] == seat_number:
+            return c
+    return None
+
+
 # Write the seat arrangement to a file
 def write_seats_to_file(seats):
     with open(SEATS_FILE, "w") as file:
@@ -176,9 +243,74 @@ def write_seats_to_file(seats):
             file.write(s + "\n")
 
 
+# check whether a reference number is unique
+def is_unique_reference_number(seats, reference_number):
+    for row in seats:
+        for column in row:
+            if column == reference_number:
+                return False
+    return True
+
+
+# generate a reference number (8 alphanumeric characters)
+def generate_reference_number(seats):
+    # pick 4 random numbers and 4 random letters, then shuffle them
+    # to get a reference number. This process is repeated until
+    # we get a unique reference number
+
+    numbers = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
+    letters = [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e",
+        "f",
+        "g",
+        "h",
+        "i",
+        "j",
+        "k",
+        "l",
+        "m",
+        "n",
+        "o",
+        "p",
+        "q",
+        "r",
+        "s",
+        "t",
+        "u",
+        "v",
+        "u",
+        "w",
+        "x",
+        "y",
+        "z",
+    ]
+
+    random_numbers = random.sample(numbers, 4)
+    random_letters = random.sample(letters, 4)
+    random_numbers_and_letters = random_letters + random_numbers
+    random.shuffle(random_numbers_and_letters)
+    reference_number = "".join(random_numbers_and_letters)
+    while not is_unique_reference_number(
+        seats, reference_number
+    ):  # this loop is guaranteed to not be infinite because there are so many ways to choose numbers and letters
+        random_numbers = random.choice(numbers)
+        random_letters = random.choice(letters)
+        random_numbers_and_letters = random_letters + random_numbers
+        random.shuffle(random_numbers_and_letters)
+        reference_number = "".join(random_numbers_and_letters)
+
+    return reference_number
+
+
 def main():
+
     print_welcome_message()
     seats = read_seats_from_file()  # get the starting seat arrangement
+    customers = read_customers_from_file()
     user_input = ""
     # loop until the user exits the program by entering 5
     while user_input != "5":
@@ -187,16 +319,17 @@ def main():
         if user_input == "1":
             check_seat_availability(seats)
         elif user_input == "2":
-            book_seat(seats)
+            book_seat(seats, customers)
         elif user_input == "3":
-            free_seat(seats)
+            free_seat(seats, customers)
         elif user_input == "4":
-            show_booking_state(seats)
+            show_booking_state(seats, customers)
         elif user_input == "5":
             pass
         else:
             print("Invalid input. Please try again.")
-    pass
+    write_seats_to_file(seats)
+    write_customers_to_file(customers)
 
 
 main()
